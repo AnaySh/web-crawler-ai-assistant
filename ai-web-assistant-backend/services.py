@@ -1,66 +1,42 @@
 from typing import Optional, List, Dict
-import openai
 from models import APIKey, QAPair, Provider, Model
 from db import db_session
 from config import Config
+from providers import AIProviderFactory
 
-class OpenAIService:
+class AIService:
     @staticmethod
-    def get_api_key() -> Optional[str]:
-        api_key = APIKey.query.filter_by(is_valid=True).first()
-        return api_key.key if api_key else None
-
-    @staticmethod
-    def truncate_text(text: str, max_chars: int = 4000) -> str:
-        """Truncate text to a maximum number of characters while trying to keep complete sentences."""
-        if len(text) <= max_chars:
-            return text
-        
-        # Try to find the last sentence boundary before max_chars
-        truncated = text[:max_chars]
-        last_period = truncated.rfind('.')
-        last_question = truncated.rfind('?')
-        last_exclamation = truncated.rfind('!')
-        
-        # Find the last sentence boundary
-        cut_point = max(last_period, last_question, last_exclamation)
-        if cut_point > 0:
-            return text[:cut_point + 1]
-        return truncated + "..."
-
-    @staticmethod
-    async def ask_question(question: str, context: str, provider: str = "openai", model: str = None) -> Dict:
-        # Get the appropriate API key
+    def get_api_key(provider: str, user_id: Optional[str] = None) -> Optional[APIKey]:
         query = APIKey.query.filter_by(provider=provider, is_valid=True)
-        api_key = query.first()
+        if user_id:
+            query = query.filter_by(user_id=user_id)
+        return query.first()
+
+    @staticmethod
+    def ask_question(question: str, context: str, provider: str = "openai", model: Optional[str] = None, user_id: Optional[str] = None) -> Dict:
+        # Validate provider
+        if provider not in Config.SUPPORTED_PROVIDERS:
+            return {"error": f"Unsupported provider. Must be one of: {list(Config.SUPPORTED_PROVIDERS.keys())}"}
         
+        # Validate model if provided
+        if model and model not in Config.SUPPORTED_PROVIDERS[provider]:
+            return {"error": f"Unsupported model for {provider}. Must be one of: {Config.SUPPORTED_PROVIDERS[provider]}"}
+        
+        # Get API key
+        api_key = AIService.get_api_key(provider, user_id)
         if not api_key:
             return {"error": f"No valid API key found for provider: {provider}"}
-
-        # Truncate context if too long
-        truncated_context = OpenAIService.truncate_text(context)
         
-        try:
-            if provider == "openai":
-                client = openai.OpenAI(api_key=api_key.key)
-                response = await client.chat.completions.create(
-                    model=model or api_key.model,
-                    messages=[
-                        {"role": "system", "content": "You are a helpful assistant analyzing webpage content."},
-                        {"role": "user", "content": f"Context: {truncated_context}\n\nQuestion: {question}"}
-                    ],
-                    max_tokens=Config.MAX_TOKENS,
-                    temperature=Config.TEMPERATURE
-                )
-                return {"answer": response.choices[0].message.content}
-            elif provider == "anthropic":
-                # Add Anthropic API implementation here
-                # You would need to install and import the Anthropic client
-                return {"error": "Anthropic API implementation pending"}
-            else:
-                return {"error": f"Unsupported provider: {provider}"}
-        except Exception as e:
-            return {"error": str(e)}
+        # Create provider instance
+        provider_instance = AIProviderFactory.create_provider(provider, api_key.key)
+        if not provider_instance:
+            return {"error": f"Failed to initialize provider: {provider}"}
+        
+        # Use the model from the API key if none specified
+        model_to_use = model or api_key.model
+        
+        # Make the API call
+        return provider_instance.ask_question(question, context, model_to_use)
 
 class DatabaseService:
     @staticmethod
