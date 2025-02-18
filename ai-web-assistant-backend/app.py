@@ -1,8 +1,9 @@
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from db import init_db, shutdown_session
-from services import OpenAIService, DatabaseService
+from services import AIService, DatabaseService
 from models import Provider, Model, APIKey
+from config import Config
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -33,7 +34,7 @@ def index():
     })
 
 @app.route('/ask', methods=['POST'])
-async def ask():
+def ask():
     data = request.json
     if not data or 'question' not in data or 'webpage_content' not in data:
         return jsonify({"error": "Missing required fields"}), 400
@@ -41,11 +42,12 @@ async def ask():
     provider = data.get('provider', 'openai')  # Default to OpenAI if not specified
     model = data.get('model')  # Use the model from API key if not specified
     
-    response = await OpenAIService.ask_question(
+    response = AIService.ask_question(
         question=data['question'],
         context=data['webpage_content'],
         provider=provider,
-        model=model
+        model=model,
+        user_id=data.get('user_id')  # Optional user_id
     )
     
     if "error" in response:
@@ -137,4 +139,4 @@ def get_api_key():
     return jsonify({"error": f"No valid API key found for provider: {provider}"}), 404
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=53850)
+    app.run(host='0.0.0.0', port=51034)

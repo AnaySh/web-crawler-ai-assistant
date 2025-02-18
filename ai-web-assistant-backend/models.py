@@ -17,4 +17,23 @@ class Model(str, Enum):
 class APIKey(Base):
     __tablename__ = 'api_keys'
     
+    id = Column(Integer, primary_key=True)
+    key = Column(String(255), nullable=False)
+    provider = Column(String(50), nullable=False)
+    model = Column(String(50), nullable=False)
+    user_id = Column(String(255), nullable=True)
+    is_valid = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class QAPair(Base):
+    __tablename__ = 'qa_pairs'
     
+    id = Column(Integer, primary_key=True)
+    webpage_url = Column(String(2048), nullable=False)
+    question = Column(Text, nullable=False)
+    answer = Column(Text, nullable=False)
+    context = Column(Text, nullable=True)
+    created_by = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
